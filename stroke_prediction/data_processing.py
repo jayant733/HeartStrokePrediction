@@ -4,9 +4,27 @@ from sklearn.impute import KNNImputer
 from sklearn.preprocessing import MinMaxScaler
 from sklearn.preprocessing import OneHotEncoder
 from sklearn.linear_model import LogisticRegression
+from sklearn.neighbors import KNeighborsClassifier
+from sklearn.svm import SVC
+from sklearn.tree import DecisionTreeClassifier
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.naive_bayes import GaussianNB
+from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score
+import os
 import pickle
 
 pd.options.mode.chained_assignment = None  # default='warn'
+
+
+def get_model_path(filename):
+    """Resolve model file path dynamically depending on CWD."""
+    if os.path.isdir("models"):
+        return os.path.join("models", filename)
+    elif os.path.isdir("../models"):
+        return os.path.join("../models", filename)
+    else:
+        os.makedirs("models", exist_ok=True)
+        return os.path.join("models", filename)
 
 
 def split_test_train(df):
@@ -61,7 +79,7 @@ def format_inference_df(df):
 
 def fit_KNN_missing_values(df):
 
-    file = "../models/imputer_KNN.pickle"
+    file = get_model_path("imputer_KNN.pickle")
     imputer = KNNImputer(n_neighbors=5)
     imputer.fit(df[["bmi"]])
     pickle.dump(imputer, open(file, "wb"))
@@ -71,7 +89,7 @@ def fit_KNN_missing_values(df):
 
 def transform_imputer(df):
 
-    file = "../models/imputer_KNN.pickle"
+    file = get_model_path("imputer_KNN.pickle")
     imputer = pickle.load(open(file, "rb"))
     df["bmi"] = imputer.transform(df[["bmi"]])
     return df
@@ -89,7 +107,7 @@ def preprocess_gender(df):
 def fit_scaler(df):
 
     cols = ["age", "avg glucose level", "bmi"]
-    file = "../models/Scaler.pickle"
+    file = get_model_path("Scaler.pickle")
     scaler = MinMaxScaler()
     scaler.fit(df[cols])
     pickle.dump(scaler, open(file, "wb"))
@@ -98,7 +116,7 @@ def fit_scaler(df):
 def transfom_scaler(df):
 
     cols = ["age", "avg glucose level", "bmi"]
-    file = "../models/Scaler.pickle"
+    file = get_model_path("Scaler.pickle")
     scaler = pickle.load(open(file, "rb"))
     df[cols] = scaler.transform(df[cols])
     return df
@@ -120,8 +138,8 @@ def preprocess_ever_married(df):
 
 def fit_encoder(df):
 
-    file = "../models/OneHot.pickle"
-    enc = OneHotEncoder(handle_unknown="ignore", sparse=False)
+    file = get_model_path("OneHot.pickle")
+    enc = OneHotEncoder(handle_unknown="ignore", sparse_output=False)
     enc.fit(df[["work type", "smoking status"]])
 
     pickle.dump(enc, open(file, "wb"))
@@ -129,7 +147,7 @@ def fit_encoder(df):
 
 def transform_encoder(df):
 
-    file = "../models/OneHot.pickle"
+    file = get_model_path("OneHot.pickle")
     enc = pickle.load(open(file, "rb"))
     list_name = enc.get_feature_names_out(["work type", "smoking status"])
     df[list_name] = enc.transform(df[["work type", "smoking status"]])
@@ -158,12 +176,32 @@ def store_id(df):
     return df_ids, df
 
 
-def build_model(xtrain, ytrain):
+def get_supported_models():
+    """Return dictionary of supported supervised classification algorithms."""
+    return {
+        "logistic_regression": LogisticRegression(max_iter=3000, penalty='l1', solver='liblinear'),
+        "knn": KNeighborsClassifier(n_neighbors=5),
+        "svm": SVC(probability=True, random_state=42),
+        "decision_tree": DecisionTreeClassifier(random_state=42),
+        "random_forest": RandomForestClassifier(n_estimators=100, random_state=42),
+        "naive_bayes": GaussianNB()
+    }
 
-    file = "../models/classifier.pickle"
-    classifier = LogisticRegression(max_iter=3000,penalty='l1', solver='liblinear')
+
+def build_model(xtrain, ytrain, model_name="logistic_regression"):
+    """Build and train specified supervised learning model, saving to classifier.pickle"""
+    models = get_supported_models()
+    if model_name not in models:
+        raise ValueError(f"Unknown model_name: {model_name}. Supported models: {list(models.keys())}")
+    
+    classifier = models[model_name]
     classifier.fit(xtrain, ytrain)
+    
+    file = get_model_path("classifier.pickle")
     pickle.dump(classifier, open(file, "wb"))
+    
+    # Save model specific pickle file as well
+    pickle.dump(classifier, open(get_model_path(f"{model_name}.pickle"), "wb"))
     return classifier
 
 
@@ -202,8 +240,31 @@ def pipeline(df):
         return df
 
 
-def evaluate_model(xtest, ytest):
-    xtest = pipeline(xtest)
-    file = "../models/classifier.pickle"
-    classifier = pickle.load(open(file, "rb"))
-    return classifier.score(xtest, ytest)
+def evaluate_model(xtest, ytest, model_name="logistic_regression"):
+    xtest_processed = pipeline(xtest)
+    file_name = f"{model_name}.pickle" if model_name != "logistic_regression" else "classifier.pickle"
+    file_path = get_model_path(file_name)
+    classifier = pickle.load(open(file_path, "rb"))
+    return classifier.score(xtest_processed, ytest)
+
+
+def train_and_evaluate_all_models(df):
+    """Train and evaluate all supervised learning algorithms up to Naive Bayes."""
+    xtrain, ytrain, xtest, ytest = pipeline(df)
+    models = get_supported_models()
+    results = {}
+    
+    for name, clf in models.items():
+        clf.fit(xtrain, ytrain)
+        pickle.dump(clf, open(get_model_path(f"{name}.pickle"), "wb"))
+        
+        xtest_processed = pipeline(xtest.copy())
+        ypred = clf.predict(xtest_processed)
+        
+        results[name] = {
+            "accuracy": round(accuracy_score(ytest, ypred), 4),
+            "precision": round(precision_score(ytest, ypred, zero_division=0), 4),
+            "recall": round(recall_score(ytest, ypred, zero_division=0), 4),
+            "f1_score": round(f1_score(ytest, ypred, zero_division=0), 4)
+        }
+    return pd.DataFrame(results).T
