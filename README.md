@@ -63,3 +63,29 @@ BACKEND_SERVER =[Server]
 
 ## System Architecture: :bricks:
 ![Screenshot 2022-04-27 at 6 56 27 PM](DSP.drawio.png)
+
+## Local Setup & Quickstart
+
+1. **Install Dependencies**:
+   ```bash
+   python -m pip install -r requirements.txt
+   ```
+
+2. **Initialize Database**:
+   ```bash
+   cd postgres
+   python createdb.py
+   cd ..
+   ```
+
+3. **Start FastAPI Backend**:
+   ```bash
+   cd stroke_api
+   python -m uvicorn main:app --host 0.0.0.0 --port 8005
+   ```
+
+4. **Start Streamlit Frontend**:
+   ```bash
+   python -m streamlit run web_interface.py --server.port 8501
+   ```
+
