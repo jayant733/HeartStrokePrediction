@@ -1,5 +1,6 @@
 import pandas as pd
 import sys
+sys.path.insert(0, '..')
 sys.path.insert(0, '../stroke_prediction')
 sys.path.insert(0, '../postgres')
 from sklearn.preprocessing import OneHotEncoder
