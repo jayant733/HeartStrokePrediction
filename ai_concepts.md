@@ -14,3 +14,6 @@ RAG is a technique that enhances large language models by retrieving relevant in
 - **Agentic AI:** AI systems designed to act autonomously (or semi-autonomously) to achieve specific goals. They can perceive their environment, make decisions, and execute actions using tools.
 - **ReAct (Reason and Act):** A prompting framework for agentic AI that interleaves reasoning (thinking about what to do) and acting (using tools or interacting with the environment) to solve complex tasks step by step.
 
+## Guardrails in AI Agents
+Guardrails are safety mechanisms and constraints placed on AI agents to ensure they operate within predefined ethical, operational, and security boundaries. They prevent agents from taking harmful, unauthorized, or unintended actions.
+
