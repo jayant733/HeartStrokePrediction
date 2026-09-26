@@ -17,3 +17,8 @@ RAG is a technique that enhances large language models by retrieving relevant in
 ## Guardrails in AI Agents
 Guardrails are safety mechanisms and constraints placed on AI agents to ensure they operate within predefined ethical, operational, and security boundaries. They prevent agents from taking harmful, unauthorized, or unintended actions.
 
+## Agent Frameworks (LangChain, LangGraph, CrewAI)
+- **LangChain:** A framework designed to simplify the creation of applications using large language models, providing tools for chaining prompts, memory, and agents.
+- **LangGraph:** An extension of LangChain for building stateful, multi-actor applications with cyclic computational graphs, ideal for complex agentic workflows.
+- **CrewAI:** A framework for orchestrating role-playing, autonomous AI agents. It enables multiple agents to work together collaboratively to achieve a common goal.
+
