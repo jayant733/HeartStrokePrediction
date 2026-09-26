@@ -26,3 +26,6 @@ Guardrails are safety mechanisms and constraints placed on AI agents to ensure t
 - **Chain-of-Thought (CoT):** A prompting strategy where the model is encouraged to explicitly output intermediate reasoning steps before arriving at a final answer, which improves performance on complex reasoning tasks.
 - **Plan-and-Execute:** An agentic architecture where the agent first creates a comprehensive multi-step plan to solve a problem, and then executes the steps sequentially, often evaluating progress along the way.
 
+## Human-in-the-loop (HITL)
+Human-in-the-loop is a design pattern where human intervention, feedback, or approval is required at critical decision points during an AI system's operation, ensuring safety, accuracy, and alignment with human intent.
+
