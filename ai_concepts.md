@@ -29,3 +29,6 @@ Guardrails are safety mechanisms and constraints placed on AI agents to ensure t
 ## Human-in-the-loop (HITL)
 Human-in-the-loop is a design pattern where human intervention, feedback, or approval is required at critical decision points during an AI system's operation, ensuring safety, accuracy, and alignment with human intent.
 
+## Model Monitoring
+Model monitoring involves tracking the performance, behavior, and health of machine learning models in production. It includes checking for data drift, concept drift, latency, error rates, and output quality to ensure the model remains reliable over time.
+
