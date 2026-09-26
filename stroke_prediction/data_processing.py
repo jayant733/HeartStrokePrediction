@@ -9,7 +9,10 @@ from sklearn.svm import SVC
 from sklearn.tree import DecisionTreeClassifier
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.naive_bayes import GaussianNB
-from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score
+from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, confusion_matrix
+from xgboost import XGBClassifier
+from sklearn.cluster import KMeans, AgglomerativeClustering, DBSCAN
+from sklearn.model_selection import GridSearchCV
 import os
 import pickle
 
@@ -179,12 +182,23 @@ def store_id(df):
 def get_supported_models():
     """Return dictionary of supported supervised classification algorithms."""
     return {
-        "logistic_regression": LogisticRegression(max_iter=3000, penalty='l1', solver='liblinear'),
+        "logistic_regression": LogisticRegression(max_iter=3000, penalty='l2'),
+        "logistic_regression_l1": LogisticRegression(max_iter=3000, penalty='l1', solver='liblinear'),
+        "logistic_regression_l2": LogisticRegression(max_iter=3000, penalty='l2', solver='lbfgs'),
         "knn": KNeighborsClassifier(n_neighbors=5),
         "svm": SVC(probability=True, random_state=42),
         "decision_tree": DecisionTreeClassifier(random_state=42),
         "random_forest": RandomForestClassifier(n_estimators=100, random_state=42),
-        "naive_bayes": GaussianNB()
+        "naive_bayes": GaussianNB(),
+        "xgboost": XGBClassifier(use_label_encoder=False, eval_metric='logloss', random_state=42)
+    }
+
+def get_unsupervised_models():
+    """Return dictionary of supported unsupervised learning algorithms (Clustering)."""
+    return {
+        "kmeans": KMeans(n_clusters=2, random_state=42, n_init="auto"),
+        "hierarchical": AgglomerativeClustering(n_clusters=2),
+        "dbscan": DBSCAN(eps=0.5, min_samples=5)
     }
 
 
@@ -248,6 +262,73 @@ def evaluate_model(xtest, ytest, model_name="logistic_regression"):
     return classifier.score(xtest_processed, ytest)
 
 
+def train_unsupervised_models(df):
+    """Train unsupervised models (clustering)"""
+    xtrain, ytrain, xtest, ytest = pipeline(df)
+    models = get_unsupervised_models()
+    results = {}
+    for name, clf in models.items():
+        # Fit on training data
+        cluster_labels = clf.fit_predict(xtrain)
+        file = get_model_path(f"{name}_clustering.pickle")
+        pickle.dump(clf, open(file, "wb"))
+        results[name] = {"clusters_found": len(set(cluster_labels)) - (1 if -1 in cluster_labels else 0)}
+    return results
+
+
+def perform_hyperparameter_tuning(df, model_name="random_forest"):
+    """Example of hyperparameter tuning using GridSearchCV"""
+    xtrain, ytrain, xtest, ytest = pipeline(df)
+    models = get_supported_models()
+    
+    if model_name == "random_forest":
+        param_grid = {
+            'n_estimators': [50, 100],
+            'max_depth': [None, 10, 20]
+        }
+    elif model_name == "logistic_regression_l2":
+        param_grid = {
+            'C': [0.1, 1.0, 10.0]
+        }
+    else:
+        # Default tuning
+        param_grid = {}
+        
+    clf = models.get(model_name, RandomForestClassifier(random_state=42))
+    
+    if param_grid:
+        grid_search = GridSearchCV(clf, param_grid, cv=3, scoring='accuracy')
+        grid_search.fit(xtrain, ytrain)
+        best_clf = grid_search.best_estimator_
+        print(f"Best parameters for {model_name}: {grid_search.best_params_}")
+    else:
+        best_clf = clf
+        best_clf.fit(xtrain, ytrain)
+        
+    pickle.dump(best_clf, open(get_model_path(f"tuned_{model_name}.pickle"), "wb"))
+    
+    xtest_processed = pipeline(xtest.copy())
+    ypred = best_clf.predict(xtest_processed)
+    
+    # Explicit calculations of metrics
+    try:
+        tn, fp, fn, tp = confusion_matrix(ytest, ypred).ravel()
+    except ValueError:
+        tn, fp, fn, tp = 0, 0, 0, 0
+    
+    precision = tp / (tp + fp) if (tp + fp) > 0 else 0
+    recall = tp / (tp + fn) if (tp + fn) > 0 else 0
+    f1 = 2 * (precision * recall) / (precision + recall) if (precision + recall) > 0 else 0
+    accuracy = (tp + tn) / (tp + tn + fp + fn) if (tp + tn + fp + fn) > 0 else 0
+    
+    return {
+        "accuracy": round(accuracy, 4),
+        "precision": round(precision, 4),
+        "recall": round(recall, 4),
+        "f1_score": round(f1, 4)
+    }
+
+
 def train_and_evaluate_all_models(df):
     """Train and evaluate all supervised learning algorithms up to Naive Bayes."""
     xtrain, ytrain, xtest, ytest = pipeline(df)
@@ -261,10 +342,24 @@ def train_and_evaluate_all_models(df):
         xtest_processed = pipeline(xtest.copy())
         ypred = clf.predict(xtest_processed)
         
+        # Explicitly define and calculate Precision, Recall, and F1-score
+        # Precision = TP / (TP + FP) -> Of all predicted positives, how many were actually positive?
+        # Recall = TP / (TP + FN) -> Of all actual positives, how many were predicted positive?
+        try:
+            tn, fp, fn, tp = confusion_matrix(ytest, ypred).ravel()
+        except ValueError:
+            # Handle edge case where only one class is predicted/present
+            tn, fp, fn, tp = 0, 0, 0, 0
+            
+        precision = tp / (tp + fp) if (tp + fp) > 0 else 0
+        recall = tp / (tp + fn) if (tp + fn) > 0 else 0
+        f1 = 2 * (precision * recall) / (precision + recall) if (precision + recall) > 0 else 0
+        accuracy = (tp + tn) / (tp + tn + fp + fn) if (tp + tn + fp + fn) > 0 else 0
+        
         results[name] = {
-            "accuracy": round(accuracy_score(ytest, ypred), 4),
-            "precision": round(precision_score(ytest, ypred, zero_division=0), 4),
-            "recall": round(recall_score(ytest, ypred, zero_division=0), 4),
-            "f1_score": round(f1_score(ytest, ypred, zero_division=0), 4)
+            "accuracy": round(accuracy, 4),
+            "precision": round(precision, 4),
+            "recall": round(recall, 4),
+            "f1_score": round(f1, 4)
         }
     return pd.DataFrame(results).T
