@@ -138,3 +138,19 @@ def search_patients_file_by_date(file_name: str,
             return pd.DataFrame([])
     else:
         return None
+
+
+def get_recommendations(features: dict) -> dict:
+    """
+    Call the /recommend API endpoint.
+    Returns a dict with prediction result and full recommendations.
+    """
+    url = BACKEND_SERVER + "recommend"
+    # /recommend is a POST endpoint taking the patient body directly
+    patient_data = features.get("patient", {})
+    response = requests.post(url, json=patient_data)
+    if response.status_code == 200:
+        return response.json()
+    else:
+        print(f"Recommendation API error: {response.status_code} - {response.text}")
+        return None

@@ -24,6 +24,76 @@ def get_prediction() -> int:
         st.error("An error occurred while getting the prediction!")
 
 
+def get_recommendations_for_patient() -> dict:
+    """Call /recommend endpoint and return full recommendations dict."""
+    features = input_details_to_json()
+    result = ws.get_recommendations(features)
+    if result is not None:
+        return result
+    else:
+        st.error("Could not retrieve recommendations from the server.")
+        return {}
+
+
+def display_recommendations(rec: dict):
+    """Render a full recommendation report in the Streamlit main panel."""
+    risk_level = rec.get("risk_level", "")
+    recs = rec.get("recommendations", {})
+
+    risk_color = "#ff4b4b" if risk_level == "HIGH RISK" else "#21c354"
+    st.markdown(
+        f"""
+        <div style='background:{risk_color};padding:16px;border-radius:12px;margin-bottom:20px;'>
+          <h2 style='color:white;text-align:center;margin:0;'>🧠 Risk Level: {risk_level}</h2>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    # Risk Profile
+    profile = recs.get("risk_profile", {})
+    if profile:
+        st.markdown("### 📋 Risk Profile")
+        col1, col2, col3 = st.columns(3)
+        col1.metric("BMI Category", profile.get("bmi_category", "-").capitalize())
+        col2.metric("Glucose Level", profile.get("glucose_category", "-").replace("_", " ").capitalize())
+        col3.metric("Smoking", profile.get("smoking_category", "-").capitalize())
+        col1.metric("Hypertension", profile.get("hypertension", "-"))
+        col2.metric("Heart Disease", profile.get("heart_disease", "-"))
+
+    # Lifestyle
+    with st.expander("🏃 Lifestyle Recommendations", expanded=True):
+        for tip in recs.get("lifestyle_recommendations", []):
+            st.markdown(f"- {tip}")
+
+    # Diet
+    with st.expander("🥗 Dietary Recommendations"):
+        for tip in recs.get("dietary_recommendations", []):
+            st.markdown(f"- {tip}")
+
+    # Exercise
+    with st.expander("💪 Exercise Recommendations"):
+        for tip in recs.get("exercise_recommendations", []):
+            st.markdown(f"- {tip}")
+
+    # Medication Advisory
+    with st.expander("💊 Medication Advisory", expanded=risk_level == "HIGH RISK"):
+        for tip in recs.get("medication_advisory", []):
+            st.markdown(f"- {tip}")
+
+    # Monitoring Plan
+    with st.expander("📏 Monitoring Plan"):
+        for tip in recs.get("monitoring_plan", []):
+            st.markdown(f"- {tip}")
+
+    # Emergency Signs — always show prominently
+    st.markdown("---")
+    st.error("\n".join(recs.get("emergency_signs", [])))
+
+    # Disclaimer
+    st.warning(recs.get("disclaimer", ""))
+
+
 def get_prediction_document(filename: str, data: pd.DataFrame) -> pd.DataFrame:
     """_summary_
      Takes File Input from User Interface returns a Prediction Dataframe
@@ -264,14 +334,22 @@ with st.sidebar.expander("Single Predictions"):
 
 if submit_button:
     if validate_patient_input_details():
-        prediciton = get_prediction()
-        message = f"{first_name} {last_name} You are at risk of a stroke !" if prediciton == 1 else f"{first_name} {last_name} You are safe to slay another day :)"
-        message_color = 'red' if prediciton == 1 else 'green'
-        st.markdown(
-            f"<h3 style='text-align: left;color:{message_color}'> {(message)} </h3>", unsafe_allow_html=True)
-        if prediciton == 1:
-            link_to_visit = "Visit this website for more details on how to prevent Heart Strokes\nhttps://www.cdc.gov/stroke/prevention.htm"
-            st.info(link_to_visit)
+        result = get_recommendations_for_patient()
+        prediciton = result.get("prediction") if result else None
+        if prediciton is not None:
+            message = (
+                f"{first_name} {last_name} — You are at RISK of a Stroke! ⚠️"
+                if prediciton == 1
+                else f"{first_name} {last_name} — You are currently at LOW risk. ✅"
+            )
+            message_color = "red" if prediciton == 1 else "green"
+            st.markdown(
+                f"<h3 style='text-align:left;color:{message_color}'>{message}</h3>",
+                unsafe_allow_html=True,
+            )
+            st.markdown("---")
+            st.markdown("## 📊 Personalised Health Recommendations")
+            display_recommendations(result)
 
 # File  Prediction Page Section
 with st.sidebar.expander("Upload File for Predictions"):
