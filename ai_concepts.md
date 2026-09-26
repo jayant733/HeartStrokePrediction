@@ -10,3 +10,7 @@ A Transformer is a deep learning architecture based on self-attention, which all
 ## RAG (Retrieval-Augmented Generation)
 RAG is a technique that enhances large language models by retrieving relevant information from an external knowledge base before generating a response, thereby grounding the output in factual and up-to-date information.
 
+## Agentic AI and ReAct
+- **Agentic AI:** AI systems designed to act autonomously (or semi-autonomously) to achieve specific goals. They can perceive their environment, make decisions, and execute actions using tools.
+- **ReAct (Reason and Act):** A prompting framework for agentic AI that interleaves reasoning (thinking about what to do) and acting (using tools or interacting with the environment) to solve complex tasks step by step.
+
