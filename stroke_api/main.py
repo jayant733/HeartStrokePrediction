@@ -7,6 +7,7 @@ from sklearn.preprocessing import OneHotEncoder
 OneHotEncoder._infrequent_enabled = False
 # ML API
 from stroke_prediction.inference import make_prediction
+from stroke_prediction.recommendation_engine import generate_recommendations
 # FastAPI
 from typing import Optional
 from pydantic import BaseModel
@@ -149,7 +150,16 @@ def make_one_prediction(record: Record, patient: Patient) -> dict:
     prediction_df.drop(['firstname', 'lastname'], axis=1, inplace=True)
     prediction = int(make_prediction(prediction_df)[0])
     save_patient_record(record, patient, prediction)
-    return {"prediction": prediction}
+    recommendations = generate_recommendations(
+        prediction=prediction,
+        age=patient.age,
+        bmi=patient.bmi,
+        avg_glucose_level=patient.avg_glucose_level,
+        hypertension=patient.hypertension,
+        heart_disease=patient.heart_disease,
+        smoking_status=patient.smoking_status,
+    )
+    return {"prediction": prediction, "recommendations": recommendations}
 
 
 def make_mulitple_prediction(record: Record, patients: List[Patient]):
@@ -196,6 +206,25 @@ async def predict(record: Record, patient: Patient):
 async def predict_file(record: Record, patient: List[Patient]):
     result = make_mulitple_prediction(record, patient)
     return result
+
+
+@app.post("/recommend")
+async def recommend(patient: Patient):
+    """Predict stroke risk and return personalised recommendations for a patient."""
+    pd_dict = patient.dict()
+    prediction_df = pd.DataFrame.from_dict([pd_dict])
+    prediction_df.drop(['firstname', 'lastname'], axis=1, inplace=True)
+    prediction = int(make_prediction(prediction_df)[0])
+    recommendations = generate_recommendations(
+        prediction=prediction,
+        age=patient.age,
+        bmi=patient.bmi,
+        avg_glucose_level=patient.avg_glucose_level,
+        hypertension=patient.hypertension,
+        heart_disease=patient.heart_disease,
+        smoking_status=patient.smoking_status,
+    )
+    return {"prediction": prediction, "recommendations": recommendations}
 
 
 @app.get("/search/patient/{firstname}&{lastname}",
