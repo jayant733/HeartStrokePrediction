@@ -22,3 +22,7 @@ Guardrails are safety mechanisms and constraints placed on AI agents to ensure t
 - **LangGraph:** An extension of LangChain for building stateful, multi-actor applications with cyclic computational graphs, ideal for complex agentic workflows.
 - **CrewAI:** A framework for orchestrating role-playing, autonomous AI agents. It enables multiple agents to work together collaboratively to achieve a common goal.
 
+## Reasoning and Planning (Chain-of-Thought, Plan-and-Execute)
+- **Chain-of-Thought (CoT):** A prompting strategy where the model is encouraged to explicitly output intermediate reasoning steps before arriving at a final answer, which improves performance on complex reasoning tasks.
+- **Plan-and-Execute:** An agentic architecture where the agent first creates a comprehensive multi-step plan to solve a problem, and then executes the steps sequentially, often evaluating progress along the way.
+
