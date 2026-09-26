@@ -7,3 +7,6 @@ A Transformer is a deep learning architecture based on self-attention, which all
 - **LoRA (Low-Rank Adaptation):** A parameter-efficient fine-tuning method that injects trainable low-rank matrices into transformer layers while keeping the original weights frozen.
 - **QLoRA:** An extension of LoRA that combines quantization (like 4-bit precision) with LoRA fine-tuning, enabling fine-tuning of large models with drastically reduced memory requirements.
 
+## RAG (Retrieval-Augmented Generation)
+RAG is a technique that enhances large language models by retrieving relevant information from an external knowledge base before generating a response, thereby grounding the output in factual and up-to-date information.
+
