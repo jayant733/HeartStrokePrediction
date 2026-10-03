@@ -190,6 +190,10 @@ def _normalise_smoking(raw: str) -> str:
 # MAIN RECOMMENDATION FUNCTION
 # ─────────────────────────────────────────────────
 
+import pandas as pd
+from stroke_prediction.cluster_engine import predict_patient_cluster
+
+
 def generate_recommendations(
     prediction: int,
     age: float,
@@ -198,16 +202,21 @@ def generate_recommendations(
     hypertension: int,
     heart_disease: int,
     smoking_status: str,
+    gender: str = "Male",
+    ever_married: str = "Yes",
+    work_type: str = "Private",
+    residence_type: str = "Urban",
 ) -> dict:
     """
-    Core Recommendation Engine.
+    Core Hybrid Recommendation Engine.
 
     Flow:
-        Stroke Prediction Result (0/1)
-        → Build Risk Profile (BMI, Glucose, Smoking, Comorbidities)
-        → Assemble Lifestyle + Dietary + Medication + Monitoring recommendations
-        → Apply Guardrail (medical disclaimer injection)
-        → Return structured recommendation dict
+        1. Stroke Prediction Result (0/1) from Supervised Model
+        2. Unsupervised Patient Phenotyping (K-Means Clustering into 4 Clinical Archetypes)
+        3. Retrieve Cluster-Targeted Prescriptions & Diagnostic Workup
+        4. Assemble Lifestyle + Dietary + Rule-based Medication + Monitoring recommendations
+        5. Apply Clinical Safety Guardrail (disclaimer & emergency FAST protocol)
+        6. Return complete clinical decision support report
 
     Parameters:
         prediction (int): 1 = High Stroke Risk, 0 = Low Stroke Risk
@@ -217,9 +226,16 @@ def generate_recommendations(
         hypertension (int): 1 = Yes, 0 = No
         heart_disease (int): 1 = Yes, 0 = No
         smoking_status (str): Smoking status string
+        gender (str): Gender ('Male', 'Female', 'Other')
+        ever_married (str): Marital status ('Yes', 'No')
+        work_type (str): Work type ('Private', 'Self-employed', 'Govt_job', 'children', 'Never_worked')
+        residence_type (str): Living environment ('Urban', 'Rural')
 
     Returns:
-        dict with keys: risk_level, lifestyle, diet, exercise, medication_advisory,
+        dict with keys: risk_level, risk_profile, cluster_profile,
+                        lifestyle_recommendations, dietary_recommendations,
+                        exercise_recommendations, medication_advisory,
+                        targeted_prescriptions, diagnostic_workup,
                         monitoring_plan, emergency_signs, disclaimer
     """
     risk_level = "HIGH RISK" if prediction == 1 else "LOW RISK"
@@ -245,6 +261,39 @@ def generate_recommendations(
         age_tips.append("👴 At age 65+, fall-prevention exercises are essential to avoid head injuries.")
         age_tips.append("🧠 Schedule cognitive function assessments annually.")
 
+    # Unsupervised Patient Phenotyping
+    patient_df = pd.DataFrame([{
+        "id": 0,
+        "gender": gender,
+        "age": age,
+        "hypertension": hypertension,
+        "heart_disease": heart_disease,
+        "ever_married": ever_married,
+        "work_type": work_type,
+        "Residence_type": residence_type,
+        "avg_glucose_level": avg_glucose_level,
+        "bmi": bmi,
+        "smoking_status": smoking_status,
+    }])
+
+    try:
+        cluster_profile = predict_patient_cluster(patient_df)
+    except Exception as e:
+        cluster_profile = {
+            "cluster_id": 0,
+            "name": "General Clinical Cohort",
+            "tag": "Standard Profile",
+            "color": "#757575",
+            "archetype": "Default clinical assessment profile.",
+            "population_share": "N/A",
+            "historical_stroke_rate": "N/A",
+            "benchmarks": {},
+            "primary_risk_drivers": ["Standard clinical factors"],
+            "targeted_prescriptions": [],
+            "diagnostic_workup": ["Annual physical check-up"],
+            "targeted_lifestyle": ["Maintain balanced diet and regular exercise"],
+        }
+
     return {
         "risk_level": risk_level,
         "risk_profile": {
@@ -254,15 +303,19 @@ def generate_recommendations(
             "hypertension": "Yes" if hypertension else "No",
             "heart_disease": "Yes" if heart_disease else "No",
         },
+        "cluster_profile": cluster_profile,
         "lifestyle_recommendations": lifestyle_tips + age_tips,
         "dietary_recommendations": DIETARY_RECOMMENDATIONS,
         "exercise_recommendations": EXERCISE_RECOMMENDATIONS,
         "medication_advisory": MEDICATION_ADVISORY[risk_key],
+        "targeted_prescriptions": cluster_profile.get("targeted_prescriptions", []),
+        "diagnostic_workup": cluster_profile.get("diagnostic_workup", []),
         "monitoring_plan": MONITORING_PLAN[risk_key],
         "emergency_signs": EMERGENCY_SIGNS,
         "disclaimer": (
-            "⚕️ MEDICAL DISCLAIMER: These recommendations are for informational purposes only. "
-            "They do NOT constitute medical advice, diagnosis, or prescription. "
-            "Always consult a licensed healthcare professional before making any medical decisions."
+            "⚕️ MEDICAL DISCLAIMER: These recommendations and prescription guidelines are for educational and "
+            "clinical decision-support purposes only. They do NOT constitute an automatic prescription. "
+            "All pharmacological regimens must be prescribed and monitored by a licensed healthcare professional."
         ),
     }
+

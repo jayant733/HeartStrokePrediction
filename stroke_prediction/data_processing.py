@@ -7,7 +7,7 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.svm import SVC
 from sklearn.tree import DecisionTreeClassifier
-from sklearn.ensemble import RandomForestClassifier
+from sklearn.ensemble import RandomForestClassifier, AdaBoostClassifier, GradientBoostingClassifier
 from sklearn.naive_bayes import GaussianNB
 from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, confusion_matrix
 from xgboost import XGBClassifier
@@ -99,12 +99,17 @@ def transform_imputer(df):
 
 
 def preprocess_gender(df):
-
     df = df.replace("Male", 0)
     df = df.replace("Female", 1)
-    other_inde = df[df["gender"] == "Other"].index
-    df = df.drop(other_inde)
-    return df, other_inde
+    if "gender" in df.columns and (df["gender"] == "Other").any():
+        if len(df) > 1:
+            other_inde = df[df["gender"] == "Other"].index
+            df = df.drop(other_inde)
+            return df, other_inde
+        else:
+            df = df.replace("Other", 0)
+            return df, []
+    return df, []
 
 
 def fit_scaler(df):
@@ -174,8 +179,11 @@ def transform_scaler_encoder(df):
 
 
 def store_id(df):
-    df_ids = df["id"]
-    df = df.drop(columns=["id"])
+    if "id" in df.columns:
+        df_ids = df["id"]
+        df = df.drop(columns=["id"])
+    else:
+        df_ids = pd.Series(range(len(df)), index=df.index)
     return df_ids, df
 
 
@@ -189,6 +197,8 @@ def get_supported_models():
         "svm": SVC(probability=True, random_state=42),
         "decision_tree": DecisionTreeClassifier(random_state=42),
         "random_forest": RandomForestClassifier(n_estimators=100, random_state=42),
+        "adaboost": AdaBoostClassifier(n_estimators=100, random_state=42),
+        "gradient_boosting": GradientBoostingClassifier(n_estimators=100, random_state=42),
         "naive_bayes": GaussianNB(),
         "xgboost": XGBClassifier(use_label_encoder=False, eval_metric='logloss', random_state=42)
     }
@@ -196,8 +206,8 @@ def get_supported_models():
 def get_unsupervised_models():
     """Return dictionary of supported unsupervised learning algorithms (Clustering)."""
     return {
-        "kmeans": KMeans(n_clusters=2, random_state=42, n_init="auto"),
-        "hierarchical": AgglomerativeClustering(n_clusters=2),
+        "kmeans": KMeans(n_clusters=4, random_state=42, n_init=20),
+        "hierarchical": AgglomerativeClustering(n_clusters=4),
         "dbscan": DBSCAN(eps=0.5, min_samples=5)
     }
 

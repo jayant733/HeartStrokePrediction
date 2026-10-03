@@ -8,6 +8,21 @@ OneHotEncoder._infrequent_enabled = False
 # ML API
 from stroke_prediction.inference import make_prediction
 from stroke_prediction.recommendation_engine import generate_recommendations
+from stroke_prediction.cluster_engine import (
+    predict_patient_cluster,
+    get_all_cluster_summaries,
+    get_clustering_model,
+    CLUSTER_PROFILES
+)
+from stroke_prediction.data_processing import pipeline
+from stroke_prediction.statistical_tests import (
+    run_z_test_proportions,
+    run_z_test_means,
+    run_f_test_anova,
+    run_f_test_variance,
+    run_cluster_statistical_battery,
+    get_statistical_audit_logs,
+)
 # FastAPI
 from typing import Optional
 from pydantic import BaseModel
@@ -158,8 +173,17 @@ def make_one_prediction(record: Record, patient: Patient) -> dict:
         hypertension=patient.hypertension,
         heart_disease=patient.heart_disease,
         smoking_status=patient.smoking_status,
+        gender=patient.gender,
+        ever_married=patient.ever_married,
+        work_type=patient.work_type,
+        residence_type=patient.Residence_type,
     )
-    return {"prediction": prediction, "recommendations": recommendations}
+    cluster_info = recommendations.get("cluster_profile", {})
+    return {
+        "prediction": prediction,
+        "cluster_info": cluster_info,
+        "recommendations": recommendations,
+    }
 
 
 def make_mulitple_prediction(record: Record, patients: List[Patient]):
@@ -177,6 +201,19 @@ def make_mulitple_prediction(record: Record, patients: List[Patient]):
     prediction_df = pd.DataFrame.from_records(records)
     prediction_df.drop(['firstname', 'lastname'], axis=1, inplace=True)
     prediction_df["prediction"] = make_prediction(prediction_df)
+    # Unsupervised Patient Segmentation on the batch
+    try:
+        km = get_clustering_model()
+        features_for_clustering = prediction_df.drop(["prediction"], axis=1, errors="ignore").copy()
+        proc_features = pipeline(features_for_clustering)
+        cluster_labels = km.predict(proc_features)
+        prediction_df["cluster_id"] = cluster_labels
+        prediction_df["cluster_cohort"] = [
+            CLUSTER_PROFILES.get(c, {}).get("tag", f"Cluster {c}") for c in cluster_labels
+        ]
+    except Exception as e:
+        print(f"Batch clustering warning: {e}")
+
     results = list(prediction_df["prediction"])
     save_list_patients_record(record, patients, results)
     return dumps(prediction_df.to_dict('index'))
@@ -223,8 +260,33 @@ async def recommend(patient: Patient):
         hypertension=patient.hypertension,
         heart_disease=patient.heart_disease,
         smoking_status=patient.smoking_status,
+        gender=patient.gender,
+        ever_married=patient.ever_married,
+        work_type=patient.work_type,
+        residence_type=patient.Residence_type,
     )
-    return {"prediction": prediction, "recommendations": recommendations}
+    cluster_info = recommendations.get("cluster_profile", {})
+    return {
+        "prediction": prediction,
+        "cluster_info": cluster_info,
+        "recommendations": recommendations,
+    }
+
+
+@app.post("/cluster")
+async def cluster_patient(patient: Patient):
+    """Segment a patient into their unsupervised clinical phenotype cluster."""
+    pd_dict = patient.dict()
+    patient_df = pd.DataFrame.from_dict([pd_dict])
+    patient_df.drop(['firstname', 'lastname'], axis=1, inplace=True)
+    cluster_profile = predict_patient_cluster(patient_df)
+    return cluster_profile
+
+
+@app.get("/cluster_profiles")
+def get_clusters():
+    """Retrieve summaries of all discovered unsupervised patient clinical phenotypes."""
+    return get_all_cluster_summaries()
 
 
 @app.get("/search/patient/{firstname}&{lastname}",
@@ -257,3 +319,88 @@ async def get_patient_by_file_name(filename: str, createdon: str):
     day = createdon.split("-")[2]
     patients = db.get_patients_file_by_date(filename, year, month, day)
     return patients
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# STATISTICAL HYPOTHESIS TESTING & AUDIT LOG ENDPOINTS
+# ─────────────────────────────────────────────────────────────────────────────
+
+class ZTestProportionPayload(BaseModel):
+    count1: int
+    n1: int
+    count2: int
+    n2: int
+    label1: Optional[str] = "Cohort 1"
+    label2: Optional[str] = "Cohort 2 / Baseline"
+    alpha: Optional[float] = 0.05
+
+
+class ZTestMeanPayload(BaseModel):
+    sample_mean: float
+    sample_std: float
+    n: int
+    mu0: float
+    metric_name: Optional[str] = "Biomarker"
+    alpha: Optional[float] = 0.05
+
+
+class FTestVariancePayload(BaseModel):
+    sample1: List[float]
+    sample2: List[float]
+    label1: Optional[str] = "Cohort 1"
+    label2: Optional[str] = "Cohort 2"
+    metric_name: Optional[str] = "Biomarker"
+    alpha: Optional[float] = 0.05
+
+
+@app.get("/statistical_tests/battery")
+def get_cluster_statistical_battery():
+    """Run and return the complete hypothesis testing battery on clinical clusters."""
+    return run_cluster_statistical_battery()
+
+
+@app.get("/statistical_tests/logs")
+def get_stat_logs():
+    """Retrieve all logged statistical test executions from audit trail."""
+    return get_statistical_audit_logs()
+
+
+@app.post("/statistical_tests/z_test_proportion")
+def run_z_test_prop(payload: ZTestProportionPayload):
+    """Execute a Two-Sample Z-Test for proportions and log to audit trail."""
+    return run_z_test_proportions(
+        count1=payload.count1,
+        n1=payload.n1,
+        count2=payload.count2,
+        n2=payload.n2,
+        label1=payload.label1,
+        label2=payload.label2,
+        alpha=payload.alpha,
+    )
+
+
+@app.post("/statistical_tests/z_test_mean")
+def run_z_test_m(payload: ZTestMeanPayload):
+    """Execute a One-Sample Z-Test for mean against benchmark and log to audit trail."""
+    return run_z_test_means(
+        sample_mean=payload.sample_mean,
+        sample_std=payload.sample_std,
+        n=payload.n,
+        mu0=payload.mu0,
+        metric_name=payload.metric_name,
+        alpha=payload.alpha,
+    )
+
+
+@app.post("/statistical_tests/f_test_variance")
+def run_f_test_var(payload: FTestVariancePayload):
+    """Execute an F-Test for equality of variances and log to audit trail."""
+    return run_f_test_variance(
+        sample1=payload.sample1,
+        sample2=payload.sample2,
+        label1=payload.label1,
+        label2=payload.label2,
+        metric_name=payload.metric_name,
+        alpha=payload.alpha,
+    )
+
